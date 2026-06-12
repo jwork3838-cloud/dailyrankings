@@ -1,0 +1,29 @@
+name: Daily MLB Inference
+
+on:
+  schedule:
+    # Runs at 13:00 UTC every day (9:00 AM EST / 10:00 AM EDT)
+    - cron: '0 13 * * *'
+  workflow_dispatch: # Allows you to trigger it manually from the GitHub UI
+
+jobs:
+  run-inference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Inference Script
+        env:
+          # This pulls the secret you will set up in the GitHub UI
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python dailycell1.py
