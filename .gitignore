@@ -1,63 +1,63 @@
-# ==========================================
-# Python / Environment
-# ==========================================
+# ========================================
+# Project-Specific Files (dailycell1.py)
+# ========================================
+# Ignore the cache directory and all its contents
+mlb_cache/
+
+# Ignore the trained models directory and all its contents
+mlb_models/
+
+# Ignore filelock files created during caching
+*.lock
+
+# ========================================
+# Python Standard
+# ========================================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual Environments
-venv/
-env/
-.env/
-.venv/
-ENV/
-env.bak/
-venv.bak/
+# C extensions
+*.so
 
-# Environment Variables
+# ========================================
+# Environments & Secrets
+# ========================================
+# Ignore local environment variables (if you test locally)
 .env
 .env.local
-.env.development
-.env.production
 
-# ==========================================
-# Data / Artifacts
-# ==========================================
-# Raw datasets and databases
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ========================================
+# Data & Machine Learning
+# ========================================
+# Ignore pickle files (just in case they end up outside the model/cache folders)
+*.pkl
+
+# Ignore local CSVs or JSONs if you ever download them for testing
 *.csv
 *.dat
-*.json
-*.sqlite
-*.sqlite3
-*.db
-*.parquet
 
-# Logs and outputs
-*.log
-logs/
-output/
+# Jupyter Notebook checkpoints (if you ever test code in notebooks)
+.ipynb_checkpoints/
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# ==========================================
-# OS / IDE
-# ==========================================
+# ========================================
+# OS & IDE Files
+# ========================================
 # macOS
 .DS_Store
-.AppleDouble
-.LSOverride
 
 # Windows
 Thumbs.db
-ehthumbs.db
-Desktop.ini
 
 # VS Code
 .vscode/
-*.code-workspace
 
 # PyCharm / IntelliJ
 .idea/
-*.iml
