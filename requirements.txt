@@ -1,0 +1,9 @@
+gspread
+pandas
+numpy
+requests
+scikit-learn
+xgboost
+filelock
+scipy
+urllib3
