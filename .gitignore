@@ -1,0 +1,63 @@
+# ==========================================
+# Python / Environment
+# ==========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+
+# ==========================================
+# Data / Artifacts
+# ==========================================
+# Raw datasets and databases
+*.csv
+*.dat
+*.json
+*.sqlite
+*.sqlite3
+*.db
+*.parquet
+
+# Logs and outputs
+*.log
+logs/
+output/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# ==========================================
+# OS / IDE
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
