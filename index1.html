@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB HR Predictions</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      --bg:       #07090f;
+      --surface:  #0d1220;
+      --surface2: #111827;
+      --border:   #1e2d42;
+      --accent:   #3b82f6;
+      --hot:      #f59e0b;
+      --text:     #dde4f0;
+      --muted:    #4b607a;
+    }
+
+    * { box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #1e2d42; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2d4060; }
+
+    /* Spinner */
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Lineup card hover */
+    .lineup-card { transition: transform .15s, box-shadow .15s; }
+    .lineup-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+
+    /* Rank badge colors */
+    .rank-1 { background: linear-gradient(135deg, #92620a, #fbbf24, #d97706); color: #1a0f00; }
+    .rank-2 { background: linear-gradient(135deg, #475569, #cbd5e1, #94a3b8); color: #0f172a; }
+    .rank-3 { background: linear-gradient(135deg, #78350f, #b45309, #92400e); color: #fff7ed; }
+    .rank-other { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+    /* Table */
+    tbody tr { transition: background .08s; }
+    tbody tr:hover { background: rgba(59,130,246,.06); }
+
+    /* Stat pill glow */
+    .hot-glow { text-shadow: 0 0 20px rgba(245,158,11,.4); }
+    .blue-glow { text-shadow: 0 0 20px rgba(59,130,246,.35); }
+
+    /* Filter inputs */
+    .filter-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s;
+    }
+    .filter-input:focus { border-color: var(--accent); }
+    .filter-input::placeholder { color: var(--muted); }
+
+    /* Column header sort arrows */
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--accent) !important; }
+    th.sort-active { color: var(--hot) !important; }
+    .sort-arr { font-size: 10px; opacity: 0; margin-left: 3px; }
+    th.sort-active .sort-arr { opacity: 1; }
+
+    /* Score value */
+    .score-cell { color: var(--hot); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+    /* Config warning */
+    #config-warn { display: none; }
+
+    /* Progress bar on leaderboard card */
+    .progress-bar-outer { background: rgba(255,255,255,.08); border-radius: 3px; height: 3px; margin-top: 10px; }
+    .progress-bar-inner { height: 3px; border-radius: 3px; background: rgba(255,255,255,.6); }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ─── HEADER ─────────────────────────────────────────────── -->
+<header style="background:rgba(7,9,15,.9);border-bottom:1px solid var(--border);" class="sticky top-0 z-50 backdrop-blur-md">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <span style="font-size:20px">⚾</span>
+      <span id="dash-title" class="font-extrabold tracking-tight text-base" style="color:var(--text)">MLB HR Predictions</span>
+    </div>
+    <div class="text-right">
+      <p class="mono text-xs" style="color:var(--muted)" id="last-updated">—</p>
+    </div>
+  </div>
+</header>
+
+<!-- ─── MAIN ───────────────────────────────────────────────── -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+  <!-- Loading -->
+  <div id="loading" class="flex flex-col items-center justify-center py-28 gap-4">
+    <div class="spinner"></div>
+    <p class="text-sm" style="color:var(--muted)">Loading predictions…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-box" style="display:none">
+    <div style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:16px;" class="p-8 text-center max-w-md mx-auto">
+      <p class="text-2xl mb-3">⚠️</p>
+      <p class="font-semibold mb-1" style="color:#f87171">Could not load data</p>
+      <p id="error-msg" class="text-sm mb-4" style="color:#ef4444cc"></p>
+      <p class="text-xs" style="color:var(--muted)">Make sure the sheet is <strong>published to web</strong> and <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">SHEET_ID</code> is set in the CONFIG block.</p>
+    </div>
+  </div>
+
+  <!-- Config warning (shown when SHEET_ID is placeholder) -->
+  <div id="config-warn">
+    <div style="background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.25);border-radius:16px;" class="p-8 text-center max-w-lg mx-auto">
+      <p class="text-3xl mb-3">🔧</p>
+      <p class="font-bold text-base mb-2" style="color:#fbbf24">Dashboard needs configuration</p>
+      <p class="text-sm mb-4" style="color:#92400e">
+        Open <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:#fbbf24">docs/index.html</code> and update the <strong>CONFIG</strong> block at the top of the <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:#fbbf24">&lt;script&gt;</code> tag with your Google Sheet ID and column names, then commit and push.
+      </p>
+      <p class="text-xs" style="color:#78350f">See README.md for step-by-step setup instructions.</p>
+    </div>
+  </div>
+
+  <!-- Dashboard (hidden until data loads) -->
+  <div id="content" style="display:none" class="space-y-8">
+
+    <!-- ── STAT BAR ── -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;" class="p-4">
+        <p class="text-xs uppercase tracking-widest mb-1.5" style="color:var(--muted)">Players</p>
+        <p id="stat-total" class="text-3xl font-black mono blue-glow" style="color:var(--accent)">—</p>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;" class="p-4">
+        <p class="text-xs uppercase tracking-widest mb-1.5" style="color:var(--muted)">Teams</p>
+        <p id="stat-teams" class="text-3xl font-black mono" style="color:var(--text)">—</p>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;" class="p-4">
+        <p class="text-xs uppercase tracking-widest mb-1.5" style="color:var(--muted)">Top Score</p>
+        <p id="stat-top" class="text-3xl font-black mono hot-glow" style="color:var(--hot)">—</p>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;" class="p-4">
+        <p class="text-xs uppercase tracking-widest mb-1.5" style="color:var(--muted)">Avg Score</p>
+        <p id="stat-avg" class="text-3xl font-black mono" style="color:#34d399">—</p>
+      </div>
+    </div>
+
+    <!-- ── LEADERBOARD ── -->
+    <section>
+      <div class="flex items-baseline gap-2 mb-4">
+        <h2 class="text-xs font-semibold uppercase tracking-widest" style="color:var(--muted)">Today's Top</h2>
+        <span id="top-n-label" class="text-xs font-bold" style="color:var(--accent)">10</span>
+        <span class="text-xs font-semibold uppercase tracking-widest" style="color:var(--muted)">·</span>
+        <span id="score-col-label" class="text-xs font-semibold uppercase tracking-widest" style="color:var(--hot)"></span>
+      </div>
+      <div id="leaderboard" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3"></div>
+    </section>
+
+    <!-- ── FILTERS ── -->
+    <section style="background:var(--surface);border:1px solid var(--border);border-radius:16px;" class="p-5">
+      <p class="text-xs font-semibold uppercase tracking-widest mb-3.5" style="color:var(--muted)">Filter &amp; Sort</p>
+      <div class="flex flex-wrap gap-2">
+        <input id="search-input" type="text" class="filter-input flex-1 min-w-36" placeholder="🔍  Search player or team…" />
+        <select id="team-filter" class="filter-input min-w-36"></select>
+        <select id="sort-col"    class="filter-input min-w-40"></select>
+        <button id="sort-dir-btn"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--muted);transition:border-color .15s,color .15s;"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"
+        >↓ Desc</button>
+        <button id="reset-btn"
+          style="background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--muted);transition:border-color .15s,color .15s;"
+          onmouseover="this.style.borderColor='var(--muted)';this.style.color='var(--text)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"
+        >Clear</button>
+      </div>
+    </section>
+
+    <!-- ── TABLE ── -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <p id="result-count" class="text-xs" style="color:var(--muted)"></p>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;" class="overflow-x-auto">
+        <table class="w-full text-sm" style="border-collapse:collapse">
+          <thead id="table-head"></thead>
+          <tbody id="table-body" style="background:var(--surface)"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div><!-- /content -->
+</main>
+
+<footer class="mt-16 py-6 text-center text-xs" style="color:var(--muted);border-top:1px solid var(--border)">
+  Powered by GitHub Actions &nbsp;·&nbsp; Data from Google Sheets &nbsp;·&nbsp; Updated daily at 9 AM ET
+</footer>
+
+<script>
+// ╔══════════════════════════════════════════════╗
+// ║   ⚙️  CONFIG  —  EDIT THESE VALUES          ║
+// ╚══════════════════════════════════════════════╝
+const CONFIG = {
+  // Your Google Sheet ID
+  // Found in the sheet URL: /spreadsheets/d/THIS_PART/edit
+  SHEET_ID: "1-x26n6EhADNJgOdMHhJ4sz6XR52Qi1Hsgot1mbmClK8",
+
+  // Tab GID (0 = first tab). Check the URL for &gid=XXXX
+  SHEET_GID: "435710657",
+
+  // Column header names — must match your sheet EXACTLY (case-sensitive)
+  PLAYER_COL: "Player",        // Player name column
+  SCORE_COL:  "HR_Prob",       // Column used for leaderboard ranking (higher = better)
+  TEAM_COL:   "Team",          // Team column (drives team filter dropdown)
+
+  // Dashboard display settings
+  TITLE: "MLB Home Run Predictions",
+  TOP_N: 10,                   // Cards to show in the leaderboard
+};
+// ══════════════════════════════════════════════
+
+// ── State ──────────────────────────────────────
+let allData   = [];
+let headers   = [];
+let sortCol   = "";
+let sortDir   = "desc";
+let teamFilter = "";
+let searchText = "";
+let maxScore  = 1;   // used for progress bars
+
+// ── DOM refs ───────────────────────────────────
+const g = id => document.getElementById(id);
+
+// ── Entry point ────────────────────────────────
+function init() {
+  g("dash-title").textContent = CONFIG.TITLE;
+  document.title = CONFIG.TITLE;
+  g("top-n-label").textContent = CONFIG.TOP_N;
+  g("score-col-label").textContent = CONFIG.SCORE_COL;
+
+  if (CONFIG.SHEET_ID === "YOUR_SHEET_ID_HERE") {
+    g("loading").style.display = "none";
+    g("config-warn").style.display = "block";
+    return;
+  }
+  fetchSheet();
+}
+
+// ── Data fetch ─────────────────────────────────
+async function fetchSheet() {
+  // Use the published CSV URL — requires the sheet to be published to web
+  const url =
+    `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}` +
+    `/pub?gid=${CONFIG.SHEET_GID}&single=true&output=csv&t=${Date.now()}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} — is the sheet published to the web?`);
+    const csv  = await resp.text();
+    if (csv.trimStart().startsWith("<!")) throw new Error("Received an HTML page instead of CSV. The sheet may not be published.");
+
+    Papa.parse(csv, {
+      header:        true,
+      skipEmptyLines: true,
+      dynamicTyping:  false,
+      complete({ data, meta, errors }) {
+        if (errors.length && !data.length) { showError(errors[0].message); return; }
+        if (!data.length) { showError("The sheet appears to be empty."); return; }
+        headers  = (meta.fields || []).filter(Boolean);
+        allData  = data;
+        sortCol  = headers.includes(CONFIG.SCORE_COL) ? CONFIG.SCORE_COL : headers[0];
+        const scores = allData.map(r => toNum(r[CONFIG.SCORE_COL])).filter(n => n !== null);
+        maxScore = scores.length ? Math.max(...scores) : 1;
+        onLoaded();
+      },
+      error(e) { showError(e.message); },
+    });
+  } catch(e) { showError(e.message); }
+}
+
+// ── After data is ready ────────────────────────
+function onLoaded() {
+  g("loading").style.display = "none";
+  g("content").style.display = "block";
+
+  // Timestamp
+  g("last-updated").textContent = new Date().toLocaleString("en-US", {
+    month:"short", day:"numeric", hour:"numeric", minute:"2-digit"
+  });
+
+  // Stats bar
+  const scores = allData.map(r => toNum(r[CONFIG.SCORE_COL])).filter(n => n !== null);
+  const teams  = [...new Set(allData.map(r => r[CONFIG.TEAM_COL]).filter(Boolean))].sort();
+  g("stat-total").textContent = allData.length.toLocaleString();
+  g("stat-teams").textContent = teams.length;
+  g("stat-top").textContent   = scores.length ? fmt(Math.max(...scores)) : "—";
+  g("stat-avg").textContent   = scores.length ? fmt(scores.reduce((a,b)=>a+b,0)/scores.length) : "—";
+
+  // Sort column dropdown
+  g("sort-col").innerHTML = headers.map(h =>
+    `<option value="${esc(h)}"${h === sortCol ? " selected" : ""}>${h}</option>`
+  ).join("");
+
+  // Team filter dropdown
+  g("team-filter").innerHTML =
+    `<option value="">All Teams</option>` +
+    teams.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+
+  buildTableHead();
+
+  // Attach events
+  g("search-input").addEventListener("input", e => {
+    searchText = e.target.value.trim().toLowerCase(); renderAll();
+  });
+  g("team-filter").addEventListener("change", e => {
+    teamFilter = e.target.value; renderAll();
+  });
+  g("sort-col").addEventListener("change", e => {
+    sortCol = e.target.value; renderAll();
+  });
+  g("sort-dir-btn").addEventListener("click", () => {
+    sortDir = sortDir === "desc" ? "asc" : "desc";
+    g("sort-dir-btn").textContent = sortDir === "desc" ? "↓ Desc" : "↑ Asc";
+    renderAll();
+  });
+  g("reset-btn").addEventListener("click", () => {
+    searchText = ""; teamFilter = ""; sortDir = "desc";
+    sortCol = headers.includes(CONFIG.SCORE_COL) ? CONFIG.SCORE_COL : headers[0];
+    g("search-input").value   = "";
+    g("team-filter").value    = "";
+    g("sort-col").value       = sortCol;
+    g("sort-dir-btn").textContent = "↓ Desc";
+    renderAll();
+  });
+
+  renderAll();
+}
+
+// ── Table header ───────────────────────────────
+function buildTableHead() {
+  g("table-head").innerHTML = `
+    <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+      <th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;
+                 text-transform:uppercase;letter-spacing:.08em;color:var(--muted);width:36px">
+        #
+      </th>
+      ${headers.map(h => `
+        <th data-col="${esc(h)}" class="sortable${h === sortCol ? " sort-active" : ""}"
+            style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;
+                   text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">
+          ${esc(h)}<span class="sort-arr">${h === sortCol ? (sortDir==="desc"?"↓":"↑") : "↕"}</span>
+        </th>`
+      ).join("")}
+    </tr>`;
+
+  g("table-head").querySelectorAll("th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      sortDir = sortCol === th.dataset.col ? (sortDir==="desc"?"asc":"desc") : "desc";
+      sortCol = th.dataset.col;
+      g("sort-col").value = sortCol;
+      g("sort-dir-btn").textContent = sortDir === "desc" ? "↓ Desc" : "↑ Asc";
+      renderAll();
+    });
+  });
+}
+
+function refreshHeadHighlight() {
+  g("table-head").querySelectorAll("th[data-col]").forEach(th => {
+    const active = th.dataset.col === sortCol;
+    th.className = "sortable" + (active ? " sort-active" : "");
+    th.querySelector(".sort-arr").textContent = active ? (sortDir==="desc"?"↓":"↑") : "↕";
+  });
+}
+
+// ── Render all sections ────────────────────────
+function renderAll() {
+  const filtered = getFiltered();
+  renderLeaderboard();
+  renderTable(filtered);
+  refreshHeadHighlight();
+  g("result-count").textContent =
+    `Showing ${filtered.length.toLocaleString()} of ${allData.length.toLocaleString()} results`;
+}
+
+// ── Leaderboard cards ──────────────────────────
+function renderLeaderboard() {
+  const top = [...allData]
+    .sort((a,b) => {
+      const av = toNum(a[CONFIG.SCORE_COL]) ?? -Infinity;
+      const bv = toNum(b[CONFIG.SCORE_COL]) ?? -Infinity;
+      return bv - av;
+    })
+    .slice(0, CONFIG.TOP_N);
+
+  g("leaderboard").innerHTML = top.map((row, i) => {
+    const rank    = i + 1;
+    const rankCls = ["rank-1","rank-2","rank-3"][i] ?? "rank-other";
+    const medal   = ["🥇","🥈","🥉"][i] ?? rank;
+    const player  = row[CONFIG.PLAYER_COL] || "Unknown";
+    const team    = row[CONFIG.TEAM_COL]   || "";
+    const rawScore = row[CONFIG.SCORE_COL];
+    const score   = toNum(rawScore);
+    const display = score !== null ? fmt(score) : (rawScore ?? "—");
+    // progress bar width (relative to max)
+    const pct = score !== null && maxScore ? Math.min(100, (score / maxScore) * 100) : 0;
+
+    return `
+      <div class="lineup-card" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;">
+        <!-- Rank badge -->
+        <div class="${rankCls}" style="display:inline-flex;align-items:center;justify-content:center;
+                    width:28px;height:28px;border-radius:7px;font-size:11px;font-weight:800;
+                    font-family:'JetBrains Mono',monospace;margin-bottom:10px;">
+          ${typeof medal === "number" ? medal : medal}
+        </div>
+        <!-- Player name -->
+        <p style="font-weight:700;font-size:13px;line-height:1.3;color:var(--text);
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(player)}">
+          ${esc(player)}
+        </p>
+        <!-- Team -->
+        <p style="font-size:11px;color:var(--muted);margin-top:2px;
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${esc(team)}
+        </p>
+        <!-- Score -->
+        <p class="mono hot-glow" style="font-size:22px;font-weight:800;
+                  color:var(--hot);margin-top:10px;line-height:1;">
+          ${esc(String(display))}
+        </p>
+        <!-- Progress bar -->
+        <div class="progress-bar-outer">
+          <div class="progress-bar-inner" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+// ── Full table ─────────────────────────────────
+function renderTable(data) {
+  if (!data.length) {
+    g("table-body").innerHTML =
+      `<tr><td colspan="${headers.length+1}" style="text-align:center;padding:64px;color:var(--muted);font-size:13px;">
+        No results match your filters.
+       </td></tr>`;
+    return;
+  }
+
+  g("table-body").innerHTML = data.map((row, idx) => {
+    const isEven = idx % 2 === 0;
+    const rowBg  = isEven ? "transparent" : "rgba(255,255,255,.018)";
+    return `
+      <tr style="background:${rowBg}">
+        <td style="padding:9px 16px;font-size:11px;font-family:'JetBrains Mono',monospace;
+                   color:var(--muted);border-bottom:1px solid rgba(30,45,66,.5)">
+          ${idx + 1}
+        </td>
+        ${headers.map(h => {
+          const val     = row[h] ?? "";
+          const isScore  = h === CONFIG.SCORE_COL;
+          const isPlayer = h === CONFIG.PLAYER_COL;
+          const isTeam   = h === CONFIG.TEAM_COL;
+          const num      = toNum(val);
+
+          let display, style;
+
+          if (isScore && num !== null) {
+            display = fmt(num);
+            style   = "color:var(--hot);font-family:'JetBrains Mono',monospace;font-weight:700;";
+          } else if (isPlayer) {
+            display = esc(String(val));
+            style   = "color:var(--text);font-weight:600;";
+          } else if (isTeam) {
+            display = esc(String(val));
+            style   = "color:var(--accent);font-size:12px;font-weight:500;";
+          } else {
+            display = esc(String(val));
+            style   = "color:var(--muted);";
+          }
+
+          return `<td style="padding:9px 16px;font-size:13px;${style}
+                             border-bottom:1px solid rgba(30,45,66,.5);
+                             white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;">
+            ${display}
+          </td>`;
+        }).join("")}
+      </tr>`;
+  }).join("");
+}
+
+// ── Filtering + sorting ────────────────────────
+function getFiltered() {
+  return [...allData]
+    .filter(row => {
+      if (teamFilter && row[CONFIG.TEAM_COL] !== teamFilter) return false;
+      if (searchText && !Object.values(row).some(v =>
+        String(v).toLowerCase().includes(searchText)
+      )) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const av = toNum(a[sortCol]), bv = toNum(b[sortCol]);
+      if (av !== null && bv !== null) return sortDir === "desc" ? bv - av : av - bv;
+      const as = String(a[sortCol] ?? ""), bs = String(b[sortCol] ?? "");
+      return sortDir === "desc" ? bs.localeCompare(as) : as.localeCompare(bs);
+    });
+}
+
+// ── Utilities ──────────────────────────────────
+function toNum(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(String(v).replace(/[,$%\s]/g, ""));
+  return isNaN(n) ? null : n;
+}
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  if (Number.isInteger(n)) return n.toLocaleString();
+  const a = Math.abs(n);
+  if (a === 0) return "0";
+  if (a < 0.001) return n.toExponential(2);
+  if (a < 1)     return parseFloat(n.toFixed(4)).toString();   // 0.2534
+  if (a < 1000)  return parseFloat(n.toFixed(2)).toString();   // 14.73
+  return Math.round(n).toLocaleString();
+}
+
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+function showError(msg) {
+  g("loading").style.display  = "none";
+  g("error-box").style.display = "block";
+  g("error-msg").textContent   = msg;
+}
+
+init();
+</script>
+</body>
+</html>
